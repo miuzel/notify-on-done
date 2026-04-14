@@ -469,16 +469,18 @@ notify_wsl_with_focus() {
     local pid_file
     pid_file="$win_temp\\notify-on-done-focus.pid"
 
-    local host_info host_hwnd
+    local host_info host_hwnd host_proc_name
     host_info="$(get_host_window)"
     host_hwnd="0"
+    host_proc_name=""
     if [[ -n "$host_info" ]] && [[ "$host_info" != "NOTFOUND" ]]; then
+        host_proc_name="$(echo "$host_info" | cut -d: -f1)"
         host_hwnd="$(echo "$host_info" | cut -d: -f3)"
     fi
 
     local ps_script
     ps_script='
-param([string]$Title, [string]$Body, [int]$TimeoutSec)
+param([string]$Title, [string]$Body, [int]$TimeoutSec, [string]$HostProcName)
 
 $PidFile = "$env:TEMP\notify-on-done-focus.pid"
 
@@ -533,7 +535,9 @@ $action = {
         }
     }
     if ($hwnd -ne [IntPtr]::Zero) {
-        if ([Win32Focus]::IsIconic($hwnd)) {
+        # ShowWindow(9) restores minimized windows, but for VS Code it can
+        # incorrectly un-maximize the window. Skip it for Code.
+        if ($HostProcName -ne "Code" -and [Win32Focus]::IsIconic($hwnd)) {
             [Win32Focus]::ShowWindow($hwnd, 9) | Out-Null
         }
         [Win32Focus]::SetForegroundWindow($hwnd) | Out-Null
@@ -568,6 +572,7 @@ if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue }
         -Title "$(escape_ps "$ps_title")" \
         -Body "$(escape_ps "$ps_message")" \
         -TimeoutSec "$FOCUS_TIMEOUT_SECONDS" \
+        -HostProcName "$(escape_ps "$host_proc_name")" \
         >/dev/null 2>&1 &
 }
 

@@ -233,7 +233,7 @@ play_sound() {
 }
 
 # Flash the Windows taskbar button for the given window title.
-# First tries the WindowsTerminal process MainWindowHandle, then falls back to
+# Tries WindowsTerminal, then Code (VS Code), then falls back to
 # enumerating visible windows by title.
 flash_taskbar() {
     [[ "$ENABLE_FLASH_TASKBAR" == "true" ]] || return 0
@@ -273,7 +273,14 @@ $hwnd = [IntPtr]::Zero
 $proc = Get-Process -Name WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
     $hwnd = $proc.MainWindowHandle
-} else {
+}
+if ($hwnd -eq [IntPtr]::Zero) {
+    $proc = Get-Process -Name Code -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
+        $hwnd = $proc.MainWindowHandle
+    }
+}
+if ($hwnd -eq [IntPtr]::Zero) {
     $titleFilter = "__TITLE_PLACEHOLDER__"
     $script:foundHwnd = [IntPtr]::Zero
     $enumProc = [FlashAPI+EnumWindowsProc] {
@@ -329,15 +336,15 @@ notify_wsl_with_focus() {
     focus_hint="$(get_message click_to_focus_hint)"
     ps_message="${ps_message} ${focus_hint}"
 
-    # Flash taskbar button for Windows Terminal / VS Code
-    flash_taskbar "Claude Code"
-
     # Delay actual notification by 3 seconds: if the user clicks in during
-    # the taskbar flash, skip the remaining notification and sound.
+    # the wait, skip the remaining notification and sound.
     sleep 3
     if is_claude_focused; then
         return 0
     fi
+
+    # Flash taskbar button for Windows Terminal / VS Code
+    flash_taskbar "Claude Code"
 
     # Play custom sound after a short delay so it does not overlap with system sounds
     (sleep 1; play_sound) &
@@ -397,9 +404,18 @@ $icon.BalloonTipTitle = $Title
 $icon.BalloonTipText = $Body
 
 $action = {
+    $hwnd = [IntPtr]::Zero
     $proc = Get-Process -Name WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
         $hwnd = $proc.MainWindowHandle
+    }
+    if ($hwnd -eq [IntPtr]::Zero) {
+        $proc = Get-Process -Name Code -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
+            $hwnd = $proc.MainWindowHandle
+        }
+    }
+    if ($hwnd -ne [IntPtr]::Zero) {
         if ([Win32Focus]::IsIconic($hwnd)) {
             [Win32Focus]::ShowWindow($hwnd, 9) | Out-Null
         }
@@ -451,15 +467,15 @@ notify_wsl() {
         error)         ps_title="$(escape_ps "🔴 Claude Code - 出错")" ;;
     esac
 
-    # Flash taskbar button for Windows Terminal / VS Code
-    flash_taskbar "Claude Code"
-
     # Delay actual notification by 3 seconds: if the user clicks in during
-    # the taskbar flash, skip the remaining notification and sound.
+    # the wait, skip the remaining notification and sound.
     sleep 3
     if is_claude_focused; then
         return 0
     fi
+
+    # Flash taskbar button for Windows Terminal / VS Code
+    flash_taskbar "Claude Code"
 
     # Play custom sound after a short delay so it does not overlap with system sounds
     (sleep 1; play_sound) &

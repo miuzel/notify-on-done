@@ -553,10 +553,10 @@ Unregister-Event -SourceIdentifier "ClaudeNotifyBalloonClicked" -ErrorAction Sil
 if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue }
 '
 
-    # Write the .ps1 file from bash side via powershell.exe to avoid path/permission issues
-    powershell.exe -Command "
-        Set-Content -Path '$(escape_ps "$ps_file")' -Value '$(escape_ps "$ps_script")' -Encoding UTF8
-    " >/dev/null 2>&1 || true
+    # Write the .ps1 file via bash to avoid PowerShell heredoc/escaping issues
+    local wsl_ps_file
+    wsl_ps_file="$(wslpath -u "$ps_file")"
+    printf '%s\n' "$ps_script" > "$wsl_ps_file"
 
     # Launch PowerShell directly (no Start-Process hidden window) in bash background.
     # WSL2 powershell.exe is a Windows process and survives bash exit.

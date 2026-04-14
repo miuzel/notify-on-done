@@ -506,23 +506,32 @@ $icon.BalloonTipTitle = $Title
 $icon.BalloonTipText = $Body
 
 $action = {
-    $shell = New-Object -ComObject WScript.Shell
     $focused = $false
 
-    # Try AppActivate with the host PID first (most reliable for VS Code)
-    if ($HostPid -ne 0) {
-        $focused = $shell.AppActivate($HostPid)
+    # VS Code: use its own CLI to focus, which works reliably even from a
+    # background process because it delegates focus via internal IPC.
+    if ($HostProcName -eq "Code") {
+        try {
+            Start-Process "code" -ArgumentList "--reuse-window" -ErrorAction Stop
+            $focused = $true
+        } catch {}
     }
 
-    # Fallback to process name search
+    # Fallback: AppActivate for WindowsTerminal (and Code if CLI fails)
     if (-not $focused) {
-        $procName = "WindowsTerminal"
-        if ($HostProcName -eq "Code") {
-            $procName = "Code"
+        $shell = New-Object -ComObject WScript.Shell
+        if ($HostPid -ne 0) {
+            $focused = $shell.AppActivate($HostPid)
         }
-        $proc = Get-Process -Name $procName -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($proc) {
-            $focused = $shell.AppActivate($proc.Id)
+        if (-not $focused) {
+            $procName = "WindowsTerminal"
+            if ($HostProcName -eq "Code") {
+                $procName = "Code"
+            }
+            $proc = Get-Process -Name $procName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($proc) {
+                $focused = $shell.AppActivate($proc.Id)
+            }
         }
     }
 

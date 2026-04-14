@@ -131,35 +131,37 @@ public class WinAPI {
     public static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll", CharSet=CharSet.Auto)]
-    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-
-    [DllImport("user32.dll", CharSet=CharSet.Auto)]
     public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
 }
 "@
 $hwnd = [WinAPI]::GetForegroundWindow()
-$title = New-Object System.Text.StringBuilder 256
-[void][WinAPI]::GetWindowText($hwnd, $title, 256)
-$procId = 0
-[void][WinAPI]::GetWindowThreadProcessId($hwnd, [ref]$procId)
-$proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
-Write-Output ("PROC:" + $proc.ProcessName)
-Write-Output ("TITLE:" + $title.ToString())
+$fgPid = 0
+[void][WinAPI]::GetWindowThreadProcessId($hwnd, [ref]$fgPid)
+$proc = Get-Process -Id $fgPid -ErrorAction SilentlyContinue
+Write-Output ("FG:" + $proc.ProcessName + ":" + $fgPid)
+
+Get-WmiObject Win32_Process | Where-Object { $_.Name -eq "wsl.exe" } | ForEach-Object {
+    Write-Output ("WSL:" + $_.ProcessId + ":PARENT=" + $_.ParentProcessId)
+}
 '
 
     focus_info="$(printf '%s\n' "$ps_script" | powershell.exe -Command - 2>/dev/null)"
 
-    local proc_name window_title
-    proc_name="$(printf '%s\n' "$focus_info" | grep '^PROC:' | cut -d: -f2 | tr -d '\r')"
-    window_title="$(printf '%s\n' "$focus_info" | grep '^TITLE:' | cut -d: -f2- | tr -d '\r')"
+    local fg_proc_name fg_pid
+    fg_proc_name="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f2 | tr -d '\r')"
+    fg_pid="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f3 | tr -d '\r')"
 
-    # Windows Terminal running Claude Code
-    if [[ "$proc_name" == "WindowsTerminal" ]] && [[ "$window_title" == *"Claude Code"* ]]; then
-        return 0
+    # Windows Terminal hosting this WSL session: match foreground PID against wsl.exe parents
+    if [[ "$fg_proc_name" == "WindowsTerminal" ]]; then
+        local wsl_parent_match
+        wsl_parent_match="$(printf '%s\n' "$focus_info" | grep '^WSL:' | grep ":PARENT=${fg_pid}" | head -n1 || true)"
+        if [[ -n "$wsl_parent_match" ]]; then
+            return 0
+        fi
     fi
 
     # VS Code (any window) — conservative skip
-    if [[ "$proc_name" == "Code" ]]; then
+    if [[ "$fg_proc_name" == "Code" ]]; then
         return 0
     fi
 

@@ -469,18 +469,18 @@ notify_wsl_with_focus() {
     local pid_file
     pid_file="$win_temp\\notify-on-done-focus.pid"
 
-    local host_info host_hwnd host_proc_name
+    local host_info host_pid host_proc_name
     host_info="$(get_host_window)"
-    host_hwnd="0"
+    host_pid="0"
     host_proc_name=""
     if [[ -n "$host_info" ]] && [[ "$host_info" != "NOTFOUND" ]]; then
         host_proc_name="$(echo "$host_info" | cut -d: -f1)"
-        host_hwnd="$(echo "$host_info" | cut -d: -f3)"
+        host_pid="$(echo "$host_info" | cut -d: -f2)"
     fi
 
     local ps_script
     ps_script='
-param([string]$Title, [string]$Body, [int]$TimeoutSec, [string]$HostProcName)
+param([string]$Title, [string]$Body, [int]$TimeoutSec, [string]$HostProcName, [int]$HostPid)
 
 $PidFile = "$env:TEMP\notify-on-done-focus.pid"
 
@@ -497,21 +497,6 @@ $pid | Set-Content $PidFile -ErrorAction SilentlyContinue
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# Win32 API for focus
-$win32 = @"
-using System;
-using System.Runtime.InteropServices;
-public class Win32Focus {
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")]
-    public static extern bool IsIconic(IntPtr hWnd);
-}
-"@
-Add-Type -TypeDefinition $win32 -ErrorAction SilentlyContinue
-
 Unregister-Event -SourceIdentifier "ClaudeNotifyBalloonClicked" -ErrorAction SilentlyContinue
 
 $icon = New-Object System.Windows.Forms.NotifyIcon
@@ -521,27 +506,26 @@ $icon.BalloonTipTitle = $Title
 $icon.BalloonTipText = $Body
 
 $action = {
-    $hwnd = [IntPtr]__HOST_HWND_PLACEHOLDER__
-    if ($hwnd -eq [IntPtr]::Zero) {
-        $proc = Get-Process -Name WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
-            $hwnd = $proc.MainWindowHandle
+    $shell = New-Object -ComObject WScript.Shell
+    $focused = $false
+
+    # Try AppActivate with the host PID first (most reliable for VS Code)
+    if ($HostPid -ne 0) {
+        $focused = $shell.AppActivate($HostPid)
+    }
+
+    # Fallback to process name search
+    if (-not $focused) {
+        $procName = "WindowsTerminal"
+        if ($HostProcName -eq "Code") {
+            $procName = "Code"
+        }
+        $proc = Get-Process -Name $procName -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($proc) {
+            $focused = $shell.AppActivate($proc.Id)
         }
     }
-    if ($hwnd -eq [IntPtr]::Zero) {
-        $proc = Get-Process -Name Code -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
-            $hwnd = $proc.MainWindowHandle
-        }
-    }
-    if ($hwnd -ne [IntPtr]::Zero) {
-        # ShowWindow(9) restores minimized windows, but for VS Code it can
-        # incorrectly un-maximize the window. Skip it for Code.
-        if ($HostProcName -ne "Code" -and [Win32Focus]::IsIconic($hwnd)) {
-            [Win32Focus]::ShowWindow($hwnd, 9) | Out-Null
-        }
-        [Win32Focus]::SetForegroundWindow($hwnd) | Out-Null
-    }
+
     $icon.Visible = $false
     $icon.Dispose()
     Unregister-Event -SourceIdentifier "ClaudeNotifyBalloonClicked" -ErrorAction SilentlyContinue
@@ -559,7 +543,6 @@ $icon.Dispose()
 Unregister-Event -SourceIdentifier "ClaudeNotifyBalloonClicked" -ErrorAction SilentlyContinue
 if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue }
 '
-    ps_script="${ps_script/__HOST_HWND_PLACEHOLDER__/$host_hwnd}"
 
     # Write the .ps1 file from bash side via powershell.exe to avoid path/permission issues
     powershell.exe -Command "
@@ -573,6 +556,7 @@ if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue }
         -Body "$(escape_ps "$ps_message")" \
         -TimeoutSec "$FOCUS_TIMEOUT_SECONDS" \
         -HostProcName "$(escape_ps "$host_proc_name")" \
+        -HostPid "$host_pid" \
         >/dev/null 2>&1 &
 }
 

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "notify-on-done",
+  "description": "Cross-platform desktop notifications marketplace for Claude Code via hooks",
+  "owner": {
+    "name": "miuzel",
+    "email": "miuzel@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "notify-on-done",
+      "description": "Cross-platform desktop notifications for Claude Code via hooks. Flashes taskbar and plays sounds on WSL2.",
+      "version": "1.0.0",
+      "source": "./",
+      "author": {
+        "name": "miuzel",
+        "email": "miuzel@gmail.com"
+      },
+      "category": "productivity",
+      "homepage": "https://github.com/miuzel/notify-on-done",
+      "tags": ["notifications", "hooks", "wsl2", "productivity"]
+    }
+  ]
+}

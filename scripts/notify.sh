@@ -113,6 +113,97 @@ get_sound_file() {
     esac
 }
 
+# Cached host window info: "ProcessName:PID:HWND"
+HOST_WINDOW_INFO=""
+
+# Detect the Windows window that hosts the current WSL session.
+# Traces the powershell.exe parent chain up to the first wsl.exe ancestor,
+# then continues upward to find WindowsTerminal or Code.
+# Outputs: "ProcessName:PID:HWND" (HWND may be 0)
+get_host_window() {
+    if [[ -n "$HOST_WINDOW_INFO" ]]; then
+        echo "$HOST_WINDOW_INFO"
+        return
+    fi
+
+    if ! is_wsl; then
+        echo ""
+        return
+    fi
+
+    local ps_script result
+    ps_script='
+$myPid = $PID
+$allProcs = Get-WmiObject Win32_Process
+$wslProcs = $allProcs | Where-Object { $_.Name -eq "wsl.exe" }
+
+function Find-AncestorWsl($processId, $visited) {
+    if ($visited.ContainsKey($processId)) { return $null }
+    $visited[$processId] = $true
+    $proc = $allProcs | Where-Object { $_.ProcessId -eq $processId } | Select-Object -First 1
+    if (-not $proc) { return $null }
+    $wslMatch = $wslProcs | Where-Object { $_.ProcessId -eq $processId } | Select-Object -First 1
+    if ($wslMatch) { return $wslMatch }
+    return Find-AncestorWsl $proc.ParentProcessId $visited
+}
+
+$visited = @{}
+$ancestorWsl = Find-AncestorWsl $myPid $visited
+
+if (-not $ancestorWsl) {
+    Write-Output "NOTFOUND"
+    exit
+}
+
+$currentPid = $ancestorWsl.ParentProcessId
+$hostProc = $null
+$lastCodeProc = $null
+while ($currentPid -ne 0) {
+    try {
+        $p = Get-Process -Id $currentPid -ErrorAction Stop
+        if ($p.ProcessName -eq "WindowsTerminal") {
+            if ($p.MainWindowHandle -ne [IntPtr]::Zero) {
+                $hostProc = $p
+                break
+            }
+        } elseif ($p.ProcessName -eq "Code") {
+            $lastCodeProc = $p
+            if ($p.MainWindowHandle -ne [IntPtr]::Zero) {
+                $hostProc = $p
+                break
+            }
+        }
+        if ($p.Parent) {
+            $currentPid = $p.Parent.Id
+        } else {
+            $wmiP = $allProcs | Where-Object { $_.ProcessId -eq $currentPid } | Select-Object -First 1
+            if ($wmiP) {
+                $currentPid = $wmiP.ParentProcessId
+            } else {
+                break
+            }
+        }
+    } catch {
+        break
+    }
+}
+
+if (-not $hostProc -and $lastCodeProc) {
+    $hostProc = $lastCodeProc
+}
+
+if ($hostProc) {
+    Write-Output ($hostProc.ProcessName + ":" + $hostProc.Id + ":" + $hostProc.MainWindowHandle)
+} else {
+    Write-Output "NOTFOUND"
+}
+'
+
+    result="$(printf '%s\n' "$ps_script" | powershell.exe -Command - 2>/dev/null | tr -d '\r')"
+    HOST_WINDOW_INFO="$result"
+    echo "$HOST_WINDOW_INFO"
+}
+
 # Check if the current foreground window is already Claude Code.
 # Returns 0 (true) if focused, 1 (false) if not.
 is_claude_focused() {
@@ -120,48 +211,34 @@ is_claude_focused() {
         return 1
     fi
 
+    local host_info host_pid
+    host_info="$(get_host_window)"
+    if [[ -z "$host_info" ]] || [[ "$host_info" == "NOTFOUND" ]]; then
+        return 1
+    fi
+    host_pid="$(echo "$host_info" | cut -d: -f2)"
+
     local ps_script focus_info
     ps_script='
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-using System.Text;
 public class WinAPI {
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll", CharSet=CharSet.Auto)]
-    public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
 }
 "@
 $hwnd = [WinAPI]::GetForegroundWindow()
 $fgPid = 0
 [void][WinAPI]::GetWindowThreadProcessId($hwnd, [ref]$fgPid)
-$proc = Get-Process -Id $fgPid -ErrorAction SilentlyContinue
-Write-Output ("FG:" + $proc.ProcessName + ":" + $fgPid)
-
-Get-WmiObject Win32_Process | Where-Object { $_.Name -eq "wsl.exe" } | ForEach-Object {
-    Write-Output ("WSL:" + $_.ProcessId + ":PARENT=" + $_.ParentProcessId)
-}
+Write-Output ("FG:" + $fgPid)
 '
 
     focus_info="$(printf '%s\n' "$ps_script" | powershell.exe -Command - 2>/dev/null)"
+    local fg_pid
+    fg_pid="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f2 | tr -d '\r')"
 
-    local fg_proc_name fg_pid
-    fg_proc_name="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f2 | tr -d '\r')"
-    fg_pid="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f3 | tr -d '\r')"
-
-    # Windows Terminal hosting this WSL session: match foreground PID against wsl.exe parents
-    if [[ "$fg_proc_name" == "WindowsTerminal" ]]; then
-        local wsl_parent_match
-        wsl_parent_match="$(printf '%s\n' "$focus_info" | grep '^WSL:' | grep ":PARENT=${fg_pid}" | head -n1 || true)"
-        if [[ -n "$wsl_parent_match" ]]; then
-            return 0
-        fi
-    fi
-
-    # VS Code (any window) — conservative skip
-    if [[ "$fg_proc_name" == "Code" ]]; then
+    if [[ -n "$fg_pid" ]] && [[ "$fg_pid" == "$host_pid" ]]; then
         return 0
     fi
 
@@ -232,14 +309,58 @@ play_sound() {
     fi
 }
 
-# Flash the Windows taskbar button for the given window title.
-# Tries WindowsTerminal, then Code (VS Code), then falls back to
-# enumerating visible windows by title.
+# Flash the Windows taskbar button for the window that hosts this WSL session.
+# Uses get_host_window to find the correct Code or WindowsTerminal handle.
 flash_taskbar() {
     [[ "$ENABLE_FLASH_TASKBAR" == "true" ]] || return 0
 
+    local host_info host_hwnd
+    host_info="$(get_host_window)"
+    if [[ -n "$host_info" ]] && [[ "$host_info" != "NOTFOUND" ]]; then
+        host_hwnd="$(echo "$host_info" | cut -d: -f3)"
+    fi
+
+    # If we have a valid HWND, flash it directly
+    if [[ -n "$host_hwnd" ]] && [[ "$host_hwnd" != "0" ]]; then
+        local ps_script
+        ps_script='
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class FlashAPI {
+    [DllImport("user32.dll")]
+    public static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FLASHWINFO {
+        public uint cbSize;
+        public IntPtr hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+    public const uint FLASHW_ALL = 3;
+    public const uint FLASHW_TIMERNOFG = 12;
+}
+"@
+$hwnd = [IntPtr]__HWND_PLACEHOLDER__
+if ($hwnd -ne [IntPtr]::Zero) {
+    $fi = New-Object FlashAPI+FLASHWINFO
+    $fi.cbSize = [uint32][System.Runtime.InteropServices.Marshal]::SizeOf($fi)
+    $fi.hwnd = $hwnd
+    $fi.dwFlags = [FlashAPI]::FLASHW_ALL -bor [FlashAPI]::FLASHW_TIMERNOFG
+    $fi.uCount = 20
+    $fi.dwTimeout = 200
+    [void][FlashAPI]::FlashWindowEx([ref]$fi)
+}
+'
+        ps_script="${ps_script/__HWND_PLACEHOLDER__/$host_hwnd}"
+        printf '%s\n' "$ps_script" | powershell.exe -Command - >/dev/null 2>&1 || true
+        return
+    fi
+
+    # Fallback: search by visible window title
     local search_title
-    search_title="$(escape_ps "$1")"
+    search_title="$(escape_ps "${1:-Claude Code}")"
 
     local ps_script
     ps_script='
@@ -269,35 +390,22 @@ public class FlashAPI {
     public const uint FLASHW_TIMERNOFG = 12;
 }
 "@
-$hwnd = [IntPtr]::Zero
-$proc = Get-Process -Name WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
-    $hwnd = $proc.MainWindowHandle
-}
-if ($hwnd -eq [IntPtr]::Zero) {
-    $proc = Get-Process -Name Code -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
-        $hwnd = $proc.MainWindowHandle
-    }
-}
-if ($hwnd -eq [IntPtr]::Zero) {
-    $titleFilter = "__TITLE_PLACEHOLDER__"
-    $script:foundHwnd = [IntPtr]::Zero
-    $enumProc = [FlashAPI+EnumWindowsProc] {
-        param($h, $lp)
-        if ([FlashAPI]::IsWindowVisible($h)) {
-            $sb = New-Object System.Text.StringBuilder 256
-            [void][FlashAPI]::GetWindowText($h, $sb, 256)
-            if ($sb.ToString() -like "*$titleFilter*") {
-                $script:foundHwnd = $h
-                return $false
-            }
+$titleFilter = "__TITLE_PLACEHOLDER__"
+$script:foundHwnd = [IntPtr]::Zero
+$enumProc = [FlashAPI+EnumWindowsProc] {
+    param($h, $lp)
+    if ([FlashAPI]::IsWindowVisible($h)) {
+        $sb = New-Object System.Text.StringBuilder 256
+        [void][FlashAPI]::GetWindowText($h, $sb, 256)
+        if ($sb.ToString() -like "*$titleFilter*") {
+            $script:foundHwnd = $h
+            return $false
         }
-        return $true
     }
-    [void][FlashAPI]::EnumWindows($enumProc, [IntPtr]::Zero)
-    $hwnd = $script:foundHwnd
+    return $true
 }
+[void][FlashAPI]::EnumWindows($enumProc, [IntPtr]::Zero)
+$hwnd = $script:foundHwnd
 if ($hwnd -ne [IntPtr]::Zero) {
     $fi = New-Object FlashAPI+FLASHWINFO
     $fi.cbSize = [uint32][System.Runtime.InteropServices.Marshal]::SizeOf($fi)
@@ -361,6 +469,13 @@ notify_wsl_with_focus() {
     local pid_file
     pid_file="$win_temp\\notify-on-done-focus.pid"
 
+    local host_info host_hwnd
+    host_info="$(get_host_window)"
+    host_hwnd="0"
+    if [[ -n "$host_info" ]] && [[ "$host_info" != "NOTFOUND" ]]; then
+        host_hwnd="$(echo "$host_info" | cut -d: -f3)"
+    fi
+
     local ps_script
     ps_script='
 param([string]$Title, [string]$Body, [int]$TimeoutSec)
@@ -404,10 +519,12 @@ $icon.BalloonTipTitle = $Title
 $icon.BalloonTipText = $Body
 
 $action = {
-    $hwnd = [IntPtr]::Zero
-    $proc = Get-Process -Name WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
-        $hwnd = $proc.MainWindowHandle
+    $hwnd = [IntPtr]__HOST_HWND_PLACEHOLDER__
+    if ($hwnd -eq [IntPtr]::Zero) {
+        $proc = Get-Process -Name WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
+            $hwnd = $proc.MainWindowHandle
+        }
     }
     if ($hwnd -eq [IntPtr]::Zero) {
         $proc = Get-Process -Name Code -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -438,6 +555,7 @@ $icon.Dispose()
 Unregister-Event -SourceIdentifier "ClaudeNotifyBalloonClicked" -ErrorAction SilentlyContinue
 if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue }
 '
+    ps_script="${ps_script/__HOST_HWND_PLACEHOLDER__/$host_hwnd}"
 
     # Write the .ps1 file from bash side via powershell.exe to avoid path/permission issues
     powershell.exe -Command "

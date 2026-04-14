@@ -4,21 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a personal Claude Code configuration repository. It contains custom skills, hooks, and settings that extend Claude Code's behavior, primarily focused on a WSL2 + Windows Terminal environment.
+This is a Claude Code plugin that sends cross-platform desktop notifications via hooks. It is primarily optimized for WSL2 + Windows Terminal, with a fallback path for native Linux.
 
-## Key Components
+## Architecture
 
-### `notify-on-done` Skill
-
-Location: `.claude/skills/notify-on-done/`
-
-A cross-platform desktop notification skill for Claude Code that triggers on hooks.
-
-**Architecture:**
-- `notify.sh` — Main bash script. Detects WSL2 vs native Linux, handles focus detection, rate limiting, taskbar flashing, sounds, and BalloonTip notifications.
-- `notify-on-done.conf` — Auto-generated user config file (bash-sourcable `KEY="value"` format). Created on first run if missing.
-- `SKILL.md` — Skill manifest and documentation.
-- `.wav` files — Custom notification sounds (`task-complete.wav`, `question.wav`, `plan-ready.wav`, `error.wav`).
+- `scripts/notify.sh` — Main bash script. Detects WSL2 vs native Linux, handles focus detection, rate limiting, taskbar flashing, sounds, and BalloonTip notifications.
+- `sounds/` — Notification audio files mapped by status: `task-complete.wav`, `question.wav`, `plan-ready.wav`, `error.wav`.
+- `hooks/hooks.json` — Hook definitions consumed by Claude Code. Uses `${CLAUDE_PLUGIN_ROOT}` to reference the plugin root.
+- `.claude-plugin/plugin.json` — Plugin manifest.
+- `~/.config/claude-code/notify-on-done.conf` — Auto-generated user config (bash-sourcable `KEY="value"` format). Created on first run if missing.
 
 **Key behaviors:**
 - WSL2 path: flashes taskbar via `FlashWindowEx`, shows `BalloonTip` via PowerShell, plays sound via `MediaPlayer`.
@@ -27,30 +21,25 @@ A cross-platform desktop notification skill for Claude Code that triggers on hoo
 - Rate limiting (`should_notify`) enforces a 2-second cooldown per `CLAUDE_SESSION_ID`.
 - Experimental click-to-focus (`ENABLE_FOCUS_ON_CLICK`) launches a hidden PowerShell listener that waits for `BalloonTipClicked` and calls `SetForegroundWindow` on the Windows Terminal process.
 
-**Hook integration:**
-Configured in `.claude/settings.json`:
-- `Stop` hook → `task_complete`
-- `Notification` hook (permission/idle prompts) → `question`
-- `PreToolUse` hook (`ExitPlanMode`) → `plan_ready`
+**Hook integration (`hooks/hooks.json`):**
+- `Stop` → `task_complete`
+- `Notification` (permission/idle prompts) → `question`
+- `PreToolUse` (`ExitPlanMode`) → `plan_ready`
 
 ## Common Commands
 
-There is no build system, test suite, or package manager in this repository. Changes are validated by running the script directly:
+There is no build system, test suite, or package manager. Validate changes by running the script directly:
 
 ```bash
 # Send a test notification (creates default config if missing)
-bash .claude/skills/notify-on-done/notify.sh task_complete "test message"
+bash scripts/notify.sh task_complete "test message"
 
 # Clear rate-limit state to test rapid notifications
 rm -f ~/.cache/notify-on-done/default
 ```
 
-## Settings
-
-- `.claude/settings.json` — Global hooks configuration.
-- `.claude/settings.local.json` — Local permissions (contains allowed `Bash` patterns and `WebFetch` domains).
-
 ## Notes
 
 - The user prefers Chinese UI strings by default (`LANG="zh"` in the notify config).
 - The user works in WSL2 with Windows Terminal; WSL2-specific features are first-class.
+- When editing `notify.sh`, avoid breaking the PowerShell heredocs and string-escaping paths passed to `powershell.exe`.

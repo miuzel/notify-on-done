@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Configuration
 # ------------------------------------------------------------------
 
-CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/claude-code/skills/notify-on-done/notify-on-done.conf"
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/claude-code/notify-on-done.conf"
 
 # Defaults
 ENABLE_SOUND="true"
@@ -102,12 +102,14 @@ escape_ps() {
 }
 
 get_sound_file() {
+    local sounds_dir
+    sounds_dir="$(cd "$SCRIPT_DIR/../sounds" && pwd)"
     case "$STATUS" in
-        task_complete) echo "$SCRIPT_DIR/task-complete.wav" ;;
-        question)      echo "$SCRIPT_DIR/question.wav" ;;
-        plan_ready)    echo "$SCRIPT_DIR/plan-ready.wav" ;;
-        error)         echo "$SCRIPT_DIR/error.wav" ;;
-        *)             echo "$SCRIPT_DIR/task-complete.wav" ;;
+        task_complete) echo "$sounds_dir/task-complete.wav" ;;
+        question)      echo "$sounds_dir/question.wav" ;;
+        plan_ready)    echo "$sounds_dir/plan-ready.wav" ;;
+        error)         echo "$sounds_dir/error.wav" ;;
+        *)             echo "$sounds_dir/task-complete.wav" ;;
     esac
 }
 

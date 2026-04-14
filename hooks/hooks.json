@@ -1,0 +1,36 @@
+{
+  "description": "Send desktop notifications when Claude finishes or needs attention",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh task_complete \"Claude Code 已完成\""
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh question \"Claude Code 需要你的确认\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh plan_ready \"Claude Code 计划已生成，等待审批\""
+          }
+        ]
+      }
+    ]
+  }
+}

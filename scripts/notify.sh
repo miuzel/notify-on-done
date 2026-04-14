@@ -512,7 +512,7 @@ $action = {
     # background process because it delegates focus via internal IPC.
     if ($HostProcName -eq "Code") {
         try {
-            Start-Process "code" -ArgumentList "--reuse-window" -ErrorAction Stop
+            Start-Process "code" -ArgumentList "--reuse-window" -WindowStyle Hidden -ErrorAction Stop
             $focused = $true
         } catch {}
     }
@@ -558,7 +558,7 @@ if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue }
     wsl_ps_file="$(wslpath -u "$ps_file")"
     printf '%s\n' "$ps_script" > "$wsl_ps_file"
 
-    # Launch PowerShell directly (no Start-Process hidden window) in bash background.
+    # Launch PowerShell directly in bash background.
     # WSL2 powershell.exe is a Windows process and survives bash exit.
     nohup powershell.exe -ExecutionPolicy Bypass -File "$(escape_ps "$ps_file")" \
         -Title "$(escape_ps "$ps_title")" \

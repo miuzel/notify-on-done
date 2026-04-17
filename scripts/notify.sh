@@ -115,6 +115,14 @@ get_sound_file() {
 
 # Cached host window info: "ProcessName:PID:HWND"
 HOST_WINDOW_INFO=""
+HOST_WINDOW_CACHE_FILE=""
+
+get_host_window_cache_file() {
+    local session_id="${CLAUDE_SESSION_ID:-default}"
+    local state_dir="${XDG_CACHE_HOME:-$HOME/.cache}/notify-on-done"
+    mkdir -p "$state_dir" 2>/dev/null || true
+    echo "$state_dir/host-$session_id.info"
+}
 
 # Detect the Windows window that hosts the current WSL session.
 # Traces the powershell.exe parent chain up to the first wsl.exe ancestor,
@@ -129,6 +137,18 @@ get_host_window() {
     if ! is_wsl; then
         echo ""
         return
+    fi
+
+    if [[ -z "$HOST_WINDOW_CACHE_FILE" ]]; then
+        HOST_WINDOW_CACHE_FILE="$(get_host_window_cache_file)"
+    fi
+
+    if [[ -f "$HOST_WINDOW_CACHE_FILE" ]]; then
+        HOST_WINDOW_INFO="$(cat "$HOST_WINDOW_CACHE_FILE" 2>/dev/null || true)"
+        if [[ -n "$HOST_WINDOW_INFO" ]]; then
+            echo "$HOST_WINDOW_INFO"
+            return
+        fi
     fi
 
     local ps_script result
@@ -201,6 +221,7 @@ if ($hostProc) {
 
     result="$(printf '%s\n' "$ps_script" | powershell.exe -Command - 2>/dev/null | tr -d '\r')"
     HOST_WINDOW_INFO="$result"
+    printf '%s\n' "$HOST_WINDOW_INFO" > "$HOST_WINDOW_CACHE_FILE" 2>/dev/null || true
     echo "$HOST_WINDOW_INFO"
 }
 
@@ -358,66 +379,7 @@ if ($hwnd -ne [IntPtr]::Zero) {
         return
     fi
 
-    # Fallback: search by visible window title
-    local search_title
-    search_title="$(escape_ps "${1:-Claude Code}")"
-
-    local ps_script
-    ps_script='
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-public class FlashAPI {
-    [DllImport("user32.dll")]
-    public static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-    [DllImport("user32.dll")]
-    public static extern bool IsWindowVisible(IntPtr hWnd);
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FLASHWINFO {
-        public uint cbSize;
-        public IntPtr hwnd;
-        public uint dwFlags;
-        public uint uCount;
-        public uint dwTimeout;
-    }
-    public const uint FLASHW_ALL = 3;
-    public const uint FLASHW_TIMERNOFG = 12;
-}
-"@
-$titleFilter = "__TITLE_PLACEHOLDER__"
-$script:foundHwnd = [IntPtr]::Zero
-$enumProc = [FlashAPI+EnumWindowsProc] {
-    param($h, $lp)
-    if ([FlashAPI]::IsWindowVisible($h)) {
-        $sb = New-Object System.Text.StringBuilder 256
-        [void][FlashAPI]::GetWindowText($h, $sb, 256)
-        if ($sb.ToString() -like "*$titleFilter*") {
-            $script:foundHwnd = $h
-            return $false
-        }
-    }
-    return $true
-}
-[void][FlashAPI]::EnumWindows($enumProc, [IntPtr]::Zero)
-$hwnd = $script:foundHwnd
-if ($hwnd -ne [IntPtr]::Zero) {
-    $fi = New-Object FlashAPI+FLASHWINFO
-    $fi.cbSize = [uint32][System.Runtime.InteropServices.Marshal]::SizeOf($fi)
-    $fi.hwnd = $hwnd
-    $fi.dwFlags = [FlashAPI]::FLASHW_ALL -bor [FlashAPI]::FLASHW_TIMERNOFG
-    $fi.uCount = 20
-    $fi.dwTimeout = 200
-    [void][FlashAPI]::FlashWindowEx([ref]$fi)
-}
-'
-    ps_script="${ps_script/__TITLE_PLACEHOLDER__/$search_title}"
-    printf '%s\n' "$ps_script" | powershell.exe -Command - >/dev/null 2>&1 || true
+    # No fallback: avoid flashing unrelated windows (browser, notepad, etc.)
 }
 
 # ------------------------------------------------------------------

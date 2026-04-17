@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh task_complete \"Claude Code 已完成\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh task_complete \"Claude Code 已完成\"",
+            "async": true
           }
         ]
       }
@@ -16,7 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh question \"Claude Code 需要你的确认\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh question \"Claude Code 需要你的确认\"",
+            "async": true
           }
         ]
       }
@@ -27,7 +29,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh plan_ready \"Claude Code 计划已生成，等待审批\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh plan_ready \"Claude Code 计划已生成，等待审批\"",
+            "async": true
           }
         ]
       }

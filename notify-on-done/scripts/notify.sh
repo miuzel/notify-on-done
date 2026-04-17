@@ -310,8 +310,18 @@ should_notify() {
         return 1
     fi
 
-    printf '%s\n' "$now" > "$state_file" 2>/dev/null || true
     return 0
+}
+
+# Record the current timestamp for rate limiting.
+# Call this ONLY after a notification was actually triggered.
+record_notify_time() {
+    local session_id="${CLAUDE_SESSION_ID:-default}"
+    local state_dir="${XDG_CACHE_HOME:-$HOME/.cache}/notify-on-done"
+    local state_file="$state_dir/$session_id"
+
+    mkdir -p "$state_dir" 2>/dev/null || return 0
+    printf '%s\n' "$(date +%s)" > "$state_file" 2>/dev/null || true
 }
 
 play_sound() {
@@ -623,8 +633,12 @@ notify_linux() {
 main() {
     send_terminal_bell
 
+    local debug_log="${XDG_CACHE_HOME:-$HOME/.cache}/notify-on-done/debug.log"
+    printf '%s STATUS=%s HOOK_EVENT=%s FOCUSED=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$STATUS" "${CLAUDE_HOOK_EVENT_NAME:-unknown}" "$(is_claude_focused && echo yes || echo no)" >> "$debug_log" 2>/dev/null || true
+
     if ! should_notify; then
         # Rate limited — skip notification
+        printf '%s STATUS=%s RATE_LIMITED=yes\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$STATUS" >> "$debug_log" 2>/dev/null || true
         return 0
     fi
 
@@ -634,11 +648,14 @@ main() {
         else
             notify_wsl
         fi
+        record_notify_time
     else
         if is_claude_focused; then
+            printf '%s STATUS=%s FOCUSED_SKIP=yes\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$STATUS" >> "$debug_log" 2>/dev/null || true
             return 0
         fi
         notify_linux
+        record_notify_time
     fi
 }
 

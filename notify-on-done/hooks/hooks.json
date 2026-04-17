@@ -12,6 +12,17 @@
         ]
       }
     ],
+    "PermissionPrompt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/notify.sh question \"Claude Code 需要你的确认\"",
+            "async": true
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "hooks": [

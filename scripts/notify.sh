@@ -118,7 +118,14 @@ HOST_WINDOW_INFO=""
 HOST_WINDOW_CACHE_FILE=""
 
 get_host_window_cache_file() {
-    local session_id="${CLAUDE_SESSION_ID:-default}"
+    local session_id
+    session_id="${CLAUDE_SESSION_ID:-}"
+    if [[ -z "$session_id" ]]; then
+        session_id="${WT_SESSION:-}"
+    fi
+    if [[ -z "$session_id" ]]; then
+        session_id="bash-$$"
+    fi
     local state_dir="${XDG_CACHE_HOME:-$HOME/.cache}/notify-on-done"
     mkdir -p "$state_dir" 2>/dev/null || true
     echo "$state_dir/host-$session_id.info"

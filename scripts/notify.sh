@@ -413,15 +413,15 @@ notify_wsl_with_focus() {
     focus_hint="$(get_message click_to_focus_hint)"
     ps_message="${ps_message} ${focus_hint}"
 
-    # Delay actual notification by 3 seconds: if the user clicks in during
-    # the wait, skip the remaining notification and sound.
+    # Flash taskbar button immediately so the user sees activity right away
+    flash_taskbar
+
+    # Delay the BalloonTip/sound by 3 seconds: if the user focuses Claude
+    # during the wait, skip the remaining notification and sound.
     sleep 3
     if is_claude_focused; then
         return 0
     fi
-
-    # Flash taskbar button for Windows Terminal / VS Code
-    flash_taskbar "Claude Code"
 
     # Play custom sound after a short delay so it does not overlap with system sounds
     (sleep 1; play_sound) &
@@ -552,15 +552,15 @@ notify_wsl() {
         error)         ps_title="$(escape_ps "🔴 Claude Code - 出错")" ;;
     esac
 
-    # Delay actual notification by 3 seconds: if the user clicks in during
-    # the wait, skip the remaining notification and sound.
+    # Flash taskbar button immediately so the user sees activity right away
+    flash_taskbar
+
+    # Delay the BalloonTip/sound by 3 seconds: if the user focuses Claude
+    # during the wait, skip the remaining notification and sound.
     sleep 3
     if is_claude_focused; then
         return 0
     fi
-
-    # Flash taskbar button for Windows Terminal / VS Code
-    flash_taskbar "Claude Code"
 
     # Play custom sound after a short delay so it does not overlap with system sounds
     (sleep 1; play_sound) &

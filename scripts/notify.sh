@@ -251,6 +251,7 @@ is_claude_focused() {
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 public class WinAPI {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
@@ -259,14 +260,24 @@ public class WinAPI {
 $hwnd = [WinAPI]::GetForegroundWindow()
 $fgPid = 0
 [void][WinAPI]::GetWindowThreadProcessId($hwnd, [ref]$fgPid)
-Write-Output ("FG:" + $fgPid)
+$fgName = ""
+try {
+    $proc = Get-Process -Id $fgPid -ErrorAction Stop
+    $fgName = $proc.ProcessName
+} catch {}
+Write-Output ("FG:" + $fgPid + ":" + $fgName)
 '
 
     focus_info="$(printf '%s\n' "$ps_script" | powershell.exe -Command - 2>/dev/null)"
-    local fg_pid
+    local fg_pid fg_name
     fg_pid="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f2 | tr -d '\r')"
+    fg_name="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f3 | tr -d '\r')"
 
+    # Match by PID or by known host process names (handles VS Code multi-process)
     if [[ -n "$fg_pid" ]] && [[ "$fg_pid" == "$host_pid" ]]; then
+        return 0
+    fi
+    if [[ "$fg_name" == "Code" ]] || [[ "$fg_name" == "WindowsTerminal" ]]; then
         return 0
     fi
 

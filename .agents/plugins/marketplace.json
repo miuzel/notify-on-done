@@ -1,0 +1,20 @@
+{
+  "name": "notify-on-done",
+  "interface": {
+    "displayName": "notify-on-done"
+  },
+  "plugins": [
+    {
+      "name": "notify-on-done",
+      "source": {
+        "source": "local",
+        "path": "./notify-on-done"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

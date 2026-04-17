@@ -1,0 +1,26 @@
+{
+  "name": "notify-on-done",
+  "version": "1.0.0",
+  "description": "Cross-platform desktop notifications for Claude Code and Codex via hooks. Flashes taskbar and plays sounds on WSL2.",
+  "author": {
+    "name": "miuzel",
+    "email": "miuzel@gmail.com",
+    "url": "https://github.com/miuzel"
+  },
+  "homepage": "https://github.com/miuzel/notify-on-done",
+  "repository": "https://github.com/miuzel/notify-on-done",
+  "license": "MIT",
+  "keywords": ["notifications", "hooks", "wsl2", "claude-code", "codex"],
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "notify-on-done",
+    "shortDescription": "Desktop notifications for Claude Code and Codex",
+    "longDescription": "Send desktop notifications when Claude Code or Codex finishes work, needs confirmation, or exits plan mode.",
+    "developerName": "miuzel",
+    "category": "Productivity",
+    "capabilities": ["Notifications"],
+    "websiteURL": "https://github.com/miuzel/notify-on-done",
+    "privacyPolicyURL": "https://github.com/miuzel/notify-on-done",
+    "termsOfServiceURL": "https://github.com/miuzel/notify-on-done"
+  }
+}

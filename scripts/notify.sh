@@ -219,6 +219,15 @@ if (-not $hostProc -and $lastCodeProc) {
     $hostProc = $lastCodeProc
 }
 
+# If the found process has no MainWindowHandle (common for VS Code child processes),
+# search all processes with the same name for one that does.
+if ($hostProc -and $hostProc.MainWindowHandle -eq [IntPtr]::Zero) {
+    $procWithHwnd = Get-Process -Name $hostProc.ProcessName -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+    if ($procWithHwnd) {
+        $hostProc = $procWithHwnd
+    }
+}
+
 if ($hostProc) {
     Write-Output ($hostProc.ProcessName + ":" + $hostProc.Id + ":" + $hostProc.MainWindowHandle)
 } else {
@@ -251,7 +260,6 @@ is_claude_focused() {
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-using System.Diagnostics;
 public class WinAPI {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
@@ -260,24 +268,14 @@ public class WinAPI {
 $hwnd = [WinAPI]::GetForegroundWindow()
 $fgPid = 0
 [void][WinAPI]::GetWindowThreadProcessId($hwnd, [ref]$fgPid)
-$fgName = ""
-try {
-    $proc = Get-Process -Id $fgPid -ErrorAction Stop
-    $fgName = $proc.ProcessName
-} catch {}
-Write-Output ("FG:" + $fgPid + ":" + $fgName)
+Write-Output ("FG:" + $fgPid)
 '
 
     focus_info="$(printf '%s\n' "$ps_script" | powershell.exe -Command - 2>/dev/null)"
-    local fg_pid fg_name
+    local fg_pid
     fg_pid="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f2 | tr -d '\r')"
-    fg_name="$(printf '%s\n' "$focus_info" | grep '^FG:' | cut -d: -f3 | tr -d '\r')"
 
-    # Match by PID or by known host process names (handles VS Code multi-process)
     if [[ -n "$fg_pid" ]] && [[ "$fg_pid" == "$host_pid" ]]; then
-        return 0
-    fi
-    if [[ "$fg_name" == "Code" ]] || [[ "$fg_name" == "WindowsTerminal" ]]; then
         return 0
     fi
 

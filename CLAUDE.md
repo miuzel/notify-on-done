@@ -15,6 +15,7 @@ This is a shared Claude Code and Codex plugin that sends cross-platform desktop 
 - `notify-on-done/.codex-plugin/plugin.json` — Codex plugin manifest.
 - `.agents/plugins/marketplace.json` — Codex marketplace metadata for local installation.
 - `.claude-plugin/marketplace.json` — Claude marketplace metadata for repository-level discovery.
+- `.codex/hooks.json` — Codex hooks file for installed users. Requires `codex_hooks = true`.
 - `~/.config/claude-code/notify-on-done.conf` — Auto-generated user config (bash-sourcable `KEY="value"` format). Created on first run if missing.
 
 **Key behaviors:**

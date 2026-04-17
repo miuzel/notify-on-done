@@ -28,7 +28,7 @@ git clone https://github.com/miuzel/notify-on-done.git
 
 ### 在 Codex 中安装
 
-这个仓库同时提供 Codex 可识别的插件清单。Codex 通过仓库内的 `notify-on-done/` 作为插件根目录加载插件，把仓库作为本地 marketplace 添加到 Codex：
+这个仓库同时提供 Codex 可识别的插件清单。Codex 通过仓库根下的 `.codex/hooks.json` 加载 hooks，并通过仓库内的 `notify-on-done/` 作为插件根目录加载插件。
 
 ```bash
 codex marketplace add /path/to/notify-on-done
@@ -41,6 +41,13 @@ codex marketplace add miuzel/notify-on-done@github
 ```
 
 然后在 Codex 的插件/marketplace 界面中安装 `notify-on-done`。
+
+Codex hooks 目前是实验性的，启用前需要在 `~/.codex/config.toml` 里打开：
+
+```toml
+[features]
+codex_hooks = true
+```
 
 ## 启用插件
 

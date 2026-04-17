@@ -62,6 +62,13 @@ if [ ! -f ".claude-plugin/marketplace.json" ]; then
     exit 1
 fi
 
+if [ ! -f ".codex/hooks.json" ]; then
+    echo "❌ Error: .codex/hooks.json not found"
+    echo ""
+    echo "This file should be included in the repository."
+    exit 1
+fi
+
 # Make script executable
 chmod +x notify-on-done/scripts/notify.sh
 
@@ -89,7 +96,11 @@ echo "5. Or install from GitHub in Claude Code:"
 echo "   /plugin marketplace add <owner>/notify-on-done"
 echo "   /plugin install notify-on-done"
 echo ""
-echo "6. Restart Claude Code or Codex for hooks to take effect"
+echo "6. Enable Codex hooks if needed:"
+echo "   [features]"
+echo "   codex_hooks = true"
+echo ""
+echo "7. Restart Claude Code or Codex for hooks to take effect"
 echo ""
 echo "Configuration:"
 echo "   ~/.config/claude-code/notify-on-done.conf"

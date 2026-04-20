@@ -11,7 +11,7 @@
   "repository": "https://github.com/miuzel/notify-on-done",
   "license": "MIT",
   "keywords": ["notifications", "hooks", "wsl2", "claude-code", "codex"],
-  "hooks": "./hooks/hooks.json",
+  "hooks": "./hooks/hooks-codex.json",
   "interface": {
     "displayName": "notify-on-done",
     "shortDescription": "Desktop notifications for Claude Code and Codex",
